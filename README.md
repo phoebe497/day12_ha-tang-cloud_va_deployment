@@ -4,6 +4,12 @@
 > Repository thực hành đi kèm bài giảng Day 12.  
 > Mỗi phần có ví dụ **cơ bản** (hiểu concept) và **chuyên sâu** (production-ready).
 
+> [!IMPORTANT]
+> **THÔNG TIN SINH VIÊN**
+> - **Họ và tên:** Nguyễn Như Yến Phương
+> - **Mã học viên:** 2A202600616
+> - **Lớp:** E403
+
 ---
 
 ## Cấu Trúc Project

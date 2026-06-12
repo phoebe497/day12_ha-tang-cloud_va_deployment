@@ -321,15 +321,20 @@ railway domain
 
 **Nhiệm vụ:** Test public URL với curl hoặc Postman.
 
-Test:
+* **Public URL của tôi:** `https://day12ha-tang-cloudvadeployment-production-84af.up.railway.app`
+
+Test thực tế:
 ```bash
 # Health check
-curl http://student-agent-domain/health
+curl https://day12ha-tang-cloudvadeployment-production-84af.up.railway.app/health
+# Trả về: {"status":"ok","version":"1.0.1","environment":"production","uptime_seconds":...}
 
-# Agent endpoint
-curl http://studen-agent-domain/ask -X POST \
+# Agent endpoint (Có X-API-Key hợp lệ)
+curl -X POST https://day12ha-tang-cloudvadeployment-production-84af.up.railway.app/ask \
+  -H "X-API-Key: bfa6864068eb7a136d7f8d94d73abefa7089c1bb0fdc67643f9c3d61a2a72bf3" \
   -H "Content-Type: application/json" \
-  -d '{"question": ""}'
+  -d '{"question": "What is Docker?"}'
+# Trả về câu trả lời JSON thành công từ Mock LLM
 ```
 
 ###  Exercise 3.2: Deploy Render (15 phút)
@@ -349,6 +354,9 @@ cd ../render
 7. Deploy!
 
 **Nhiệm vụ:** So sánh `render.yaml` với `railway.toml`. Khác nhau gì?
+* **Cơ chế hoạt động:**
+  * **`railway.toml`** là file cấu hình cục bộ cho một Service đơn lẻ (nhỏ gọn, quy định trình build Nixpacks/Dockerfile và start command).
+  * **`render.yaml`** (Infrastructure as Code - IaC) cho phép định nghĩa toàn bộ kiến trúc hạ tầng đa dịch vụ (Multi-services) trong một file duy nhất bao gồm: các Web Service, Database (PostgreSQL), Redis instance, Cron Jobs, Auto-scaling, Disk Volumes, và cơ chế liên kết biến môi trường (Environment group) giữa chúng.
 
 ###  Exercise 3.3: (Optional) GCP Cloud Run (15 phút)
 
@@ -362,10 +370,10 @@ cd ../production-cloud-run
 
 ###  Checkpoint 3
 
-- [ ] Deploy thành công lên ít nhất 1 platform
-- [ ] Có public URL hoạt động
-- [ ] Hiểu cách set environment variables trên cloud
-- [ ] Biết cách xem logs
+- [x] Deploy thành công lên ít nhất 1 platform (Railway)
+- [x] Có public URL hoạt động
+- [x] Hiểu cách set environment variables trên cloud
+- [x] Biết cách xem logs
 
 ---
 
@@ -387,9 +395,13 @@ cd ../../04-api-gateway/develop
 ```
 
 **Nhiệm vụ:** Đọc `app.py` và tìm:
-- API key được check ở đâu?
-- Điều gì xảy ra nếu sai key?
-- Làm sao rotate key?
+* **API key được check ở đâu?**
+  - Trong function `verify_api_key` (dòng 39) thông qua dependency injection `_key: str = Depends(verify_api_key)` ở route `@app.post("/ask")`. Nó kiểm tra header `X-API-Key` gửi lên.
+* **Điều gì xảy ra nếu sai key?**
+  - Nếu không gửi header `X-API-Key`, trả về lỗi `401 Unauthorized` (`"Missing API key..."`).
+  - Nếu gửi sai key, trả về lỗi `403 Forbidden` (`"Invalid API key."`).
+* **Làm sao rotate key?**
+  - Thay đổi giá trị biến môi trường `AGENT_API_KEY` (ví dụ sửa file `.env.local` hoặc thay đổi cấu hình trên Railway Dashboard) rồi restart ứng dụng. Do code đọc key bằng `os.getenv("AGENT_API_KEY")`, key mới sẽ tự động được áp dụng mà không cần thay đổi source code hay rebuild docker image.
 
 Test:
 ```bash
@@ -419,9 +431,9 @@ cd ../production
 ```bash
 python app.py
 
-curl http://localhost:8000/token -X POST \
+curl http://localhost:8000/auth/token -X POST \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "secret"}'
+  -d '{"username": "student", "password": "demo123"}'
 ```
 
 3. Dùng token để gọi API:
@@ -436,9 +448,13 @@ curl http://localhost:8000/ask -X POST \
 ###  Exercise 4.3: Rate limiting
 
 **Nhiệm vụ:** Đọc `rate_limiter.py` và trả lời:
-- Algorithm nào được dùng? (Token bucket? Sliding window?)
-- Limit là bao nhiêu requests/minute?
-- Làm sao bypass limit cho admin?
+* **Algorithm nào được dùng?**
+  - Thuật toán **Sliding Window Counter** sử dụng `deque` để ghi nhớ các mốc thời gian của request trong vòng 60 giây và tự động loại bỏ các mốc thời gian quá hạn.
+* **Limit là bao nhiêu requests/minute?**
+  - **User thường (`student`):** 10 requests / 60 giây (qua đối tượng `rate_limiter_user`).
+  - **Admin (`teacher`):** 100 requests / 60 giây (qua đối tượng `rate_limiter_admin`).
+* **Làm sao bypass limit cho admin?**
+  - Hệ thống lấy thông tin `role` từ JWT token đã được decode. Nếu `user["role"] == "admin"`, hệ thống sẽ áp dụng bộ lọc `rate_limiter_admin` (cho phép tối đa 100 requests/phút) thay vì bộ lọc mặc định `rate_limiter_user` của user thường.
 
 Test:
 ```bash
@@ -498,10 +514,10 @@ def check_budget(user_id: str, estimated_cost: float) -> bool:
 
 ###  Checkpoint 4
 
-- [ ] Implement API key authentication
-- [ ] Hiểu JWT flow
-- [ ] Implement rate limiting
-- [ ] Implement cost guard với Redis
+- [x] Implement API key authentication
+- [x] Hiểu JWT flow
+- [x] Implement rate limiting
+- [x] Implement cost guard với Redis
 
 ---
 
@@ -599,6 +615,7 @@ curl http://localhost:8000/ask -X POST \
 kill -TERM $PID
 
 # Quan sát: Request có hoàn thành không?
+# Trả lời: Có, request đang chạy vẫn hoàn thành thành công và trả về dữ liệu bình thường cho client trước khi Server uvicorn chính thức đóng tiến trình (Shutdown).
 ```
 
 ###  Exercise 5.3: Stateless design
@@ -670,11 +687,11 @@ Script này:
 
 ###  Checkpoint 5
 
-- [ ] Implement health và readiness checks
-- [ ] Implement graceful shutdown
-- [ ] Refactor code thành stateless
-- [ ] Hiểu load balancing với Nginx
-- [ ] Test stateless design
+- [x] Implement health và readiness checks
+- [x] Implement graceful shutdown
+- [x] Refactor code thành stateless
+- [x] Hiểu load balancing với Nginx
+- [x] Test stateless design
 
 ---
 
@@ -687,23 +704,23 @@ Build một production-ready AI agent từ đầu, kết hợp TẤT CẢ concep
 ###  Requirements
 
 **Functional:**
-- [ ] Agent trả lời câu hỏi qua REST API
-- [ ] Support conversation history
-- [ ] Streaming responses (optional)
+- [x] Agent trả lời câu hỏi qua REST API
+- [x] Support conversation history
+- [x] Streaming responses (optional)
 
 **Non-functional:**
-- [ ] Dockerized với multi-stage build
-- [ ] Config từ environment variables
-- [ ] API key authentication
-- [ ] Rate limiting (10 req/min per user)
-- [ ] Cost guard ($10/month per user)
-- [ ] Health check endpoint
-- [ ] Readiness check endpoint
-- [ ] Graceful shutdown
-- [ ] Stateless design (state trong Redis)
-- [ ] Structured JSON logging
-- [ ] Deploy lên Railway hoặc Render
-- [ ] Public URL hoạt động
+- [x] Dockerized với multi-stage build
+- [x] Config từ environment variables
+- [x] API key authentication
+- [x] Rate limiting (10 req/min per user)
+- [x] Cost guard ($10/month per user)
+- [x] Health check endpoint
+- [x] Readiness check endpoint
+- [x] Graceful shutdown
+- [x] Stateless design (state trong Redis)
+- [x] Structured JSON logging
+- [x] Deploy lên Railway hoặc Render
+- [x] Public URL hoạt động
 
 ### 🏗 Architecture
 

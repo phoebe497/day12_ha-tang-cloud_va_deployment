@@ -24,16 +24,33 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Security, Depends, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
 from app.config import settings
 
-# Hàm LLM Routing linh hoạt
-from app.llm import ask as llm_ask
+import openai
+from utils.mock_llm import ask as mock_ask
+
+def llm_ask(question: str) -> str:
+    if not settings.llm_key:
+        logger.info("Using Mock LLM...")
+        return mock_ask(question)
+    
+    try:
+        logger.info(f"Calling real LLM ({settings.llm_model}) via {settings.llm_url}...")
+        client = openai.OpenAI(base_url=settings.llm_url, api_key=settings.llm_key)
+        response = client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": question}]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error calling LLM API: {e}. Falling back to Mock LLM.")
+        return f"[Fallback Mock] " + mock_ask(question)
 
 # ─────────────────────────────────────────────────────────
 # Logging — JSON structured
@@ -129,9 +146,6 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# Giao diện Chat UI tĩnh
-app.mount("/chat", StaticFiles(directory="static", html=True), name="static")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -189,10 +203,23 @@ def root():
         "environment": settings.environment,
         "endpoints": {
             "ask": "POST /ask (requires X-API-Key)",
+            "chat": "GET /chat (Interactive Chat UI)",
             "health": "GET /health",
             "ready": "GET /ready",
         },
     }
+
+@app.get("/chat", response_class=HTMLResponse, tags=["Info"])
+def chat_ui():
+    """Giao diện chat HTML đơn giản kết nối trực tiếp với Agent."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    chat_file_path = os.path.join(current_dir, "chat.html")
+    try:
+        with open(chat_file_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content, status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"<h3>Error loading chat page: {e}</h3>", status_code=500)
 
 
 @app.post("/ask", response_model=AskResponse, tags=["Agent"])
@@ -236,7 +263,7 @@ async def ask_agent(
 def health():
     """Liveness probe. Platform restarts container if this fails."""
     status = "ok"
-    checks = {"llm": "mock" if not settings.openai_api_key else "openai"}
+    checks = {"llm": "mock" if not settings.llm_key else f"real ({settings.llm_model})"}
     return {
         "status": status,
         "version": settings.app_version,

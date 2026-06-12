@@ -17,10 +17,9 @@ class Settings:
     app_version: str = field(default_factory=lambda: os.getenv("APP_VERSION", "1.0.0"))
 
     # LLM
-    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
+    llm_url: str = field(default_factory=lambda: os.getenv("LLM_URL", os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")))
+    llm_key: str = field(default_factory=lambda: os.getenv("LLM_KEY", os.getenv("OPENAI_API_KEY", "")))
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "gpt-4o-mini"))
-    ollama_base_url: str = field(default_factory=lambda: os.getenv("OLLAMA_BASE_URL", ""))
-    ollama_model: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "qwen3.5:0.8b"))
 
     # Security
     agent_api_key: str = field(default_factory=lambda: os.getenv("AGENT_API_KEY", "dev-key-change-me"))
@@ -49,8 +48,8 @@ class Settings:
                 raise ValueError("AGENT_API_KEY must be set in production!")
             if self.jwt_secret == "dev-jwt-secret":
                 raise ValueError("JWT_SECRET must be set in production!")
-        if not self.openai_api_key and not self.ollama_base_url:
-            logger.warning("Neither OPENAI_API_KEY nor OLLAMA_BASE_URL set — using mock LLM")
+        if not self.llm_key:
+            logger.warning("LLM_KEY or OPENAI_API_KEY not set — using mock LLM")
         return self
 
 

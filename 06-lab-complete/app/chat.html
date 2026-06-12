@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Agent — DeepSeek</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --container-bg: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --user-bubble-bg: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            --agent-bubble-bg: rgba(31, 41, 55, 0.8);
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: var(--text-color);
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 850px;
+            height: 85vh;
+            background: var(--container-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Header */
+        .chat-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(17, 24, 39, 0.4);
+        }
+
+        .chat-title-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .chat-header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .chat-header p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Config Panel */
+        .config-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 8px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .config-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .config-panel {
+            background: rgba(15, 23, 42, 0.95);
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .config-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .config-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .config-group input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .config-group input:focus {
+            border-color: #3b82f6;
+        }
+
+        /* Chat Messages Area */
+        .chat-messages {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        /* Webkit scrollbar customized */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 80%;
+            animation: popUp 0.3s cubic-bezier(0.1, 0.8, 0.2, 1);
+        }
+
+        @keyframes popUp {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .message.agent {
+            align-self: flex-start;
+            align-items: flex-start;
+        }
+
+        .message-bubble {
+            padding: 12px 18px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            word-break: break-word;
+        }
+
+        .message.user .message-bubble {
+            background: var(--user-bubble-bg);
+            border-bottom-right-radius: 4px;
+            color: #ffffff;
+        }
+
+        .message.agent .message-bubble {
+            background: var(--agent-bubble-bg);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 4px;
+            color: #f3f4f6;
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            padding: 0 4px;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 10px 14px;
+            background: var(--agent-bubble-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+            align-self: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Suggestions Area */
+        .suggestions {
+            display: flex;
+            gap: 10px;
+            padding: 0 24px 12px;
+            overflow-x: auto;
+        }
+
+        .suggestions::-webkit-scrollbar {
+            display: none;
+        }
+
+        .suggestion-chip {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        /* Input Area */
+        .chat-input-area {
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-color);
+            background: rgba(17, 24, 39, 0.4);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            padding: 6px 14px;
+            transition: border-color 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #3b82f6;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-color);
+            font-size: 0.95rem;
+            padding: 8px 0;
+            resize: none;
+            max-height: 100px;
+            height: 36px;
+        }
+
+        .send-btn {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            transition: transform 0.2s, opacity 0.2s;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            opacity: 0.95;
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+
+        .send-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <!-- Header -->
+    <div class="chat-header">
+        <div class="chat-title-area">
+            <div class="status-dot"></div>
+            <div>
+                <h1>DeepSeek AI Agent</h1>
+                <p id="model-indicator">Model: deepseek-v4-flash</p>
+            </div>
+        </div>
+        <button class="config-btn" onclick="toggleConfig()">
+            ⚙️ Cấu hình API Key
+        </button>
+    </div>
+
+    <!-- Config Panel -->
+    <div class="config-panel" id="config-panel">
+        <div class="config-group">
+            <label for="api-key-input">X-API-Key (Ủy quyền kết nối tới Agent):</label>
+            <input type="password" id="api-key-input" placeholder="Nhập mã bảo mật AGENT_API_KEY...">
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: -4px;">
+            * Key này được lưu bảo mật trong LocalStorage trình duyệt của bạn để dùng cho các request tiếp theo.
+        </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="chat-messages" id="chat-messages">
+        <div class="message agent">
+            <div class="message-bubble">
+                Xin chào! Tôi là AI Agent kết nối với DeepSeek LLM. Bạn cần tôi trợ giúp điều gì hôm nay?
+            </div>
+            <div class="message-time" id="greeting-time">00:00</div>
+        </div>
+    </div>
+
+    <!-- Suggestions -->
+    <div class="suggestions">
+        <div class="suggestion-chip" onclick="useSuggestion(this)">Docker là gì và tại sao nên dùng?</div>
+        <div class="suggestion-chip" onclick="useSuggestion(this)">Giải thích cơ chế Graceful Shutdown?</div>
+        <div class="suggestion-chip" onclick="useSuggestion(this)">So sánh Stateless và Stateful design?</div>
+    </div>
+
+    <!-- Input -->
+    <div class="chat-input-area">
+        <div class="input-wrapper">
+            <textarea class="chat-input" id="chat-input" placeholder="Viết câu hỏi của bạn ở đây..." rows="1" onkeydown="handleKeyDown(event)"></textarea>
+        </div>
+        <button class="send-btn" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<script>
+    // Init greeting time
+    const now = new Date();
+    document.getElementById('greeting-time').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Load saved API key from localStorage
+    const savedKey = localStorage.getItem('agent_api_key');
+    if (savedKey) {
+        document.getElementById('api-key-input').value = savedKey;
+    }
+
+    // Default configuration for API
+    const apiEndpoint = "/ask";
+
+    function toggleConfig() {
+        const panel = document.getElementById('config-panel');
+        if (panel.style.display === 'flex') {
+            panel.style.display = 'none';
+        } else {
+            panel.style.display = 'flex';
+        }
+    }
+
+    function useSuggestion(chip) {
+        const input = document.getElementById('chat-input');
+        input.value = chip.innerText;
+        input.focus();
+    }
+
+    function handleKeyDown(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Reset input height & value
+        input.value = '';
+        
+        // Add User Message
+        appendMessage('user', text);
+
+        // Add Typing Indicator
+        const typingId = showTypingIndicator();
+
+        // Save key if changed
+        const apiKey = document.getElementById('api-key-input').value.trim();
+        if (apiKey) {
+            localStorage.setItem('agent_api_key', apiKey);
+        } else {
+            localStorage.removeItem('agent_api_key');
+        }
+
+        try {
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey || 'dev-key-change-me-in-production' // fallback to default development key
+                },
+                body: JSON.stringify({ question: text })
+            });
+
+            removeTypingIndicator(typingId);
+
+            if (response.ok) {
+                const data = await response.json();
+                appendMessage('agent', data.answer);
+                if (data.model) {
+                    document.getElementById('model-indicator').innerText = 'Model: ' + data.model;
+                }
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                const detail = errorData.detail || 'Lỗi kết nối tới Server Agent.';
+                appendMessage('agent', `❌ Lỗi (${response.status}): ${typeof detail === 'object' ? JSON.stringify(detail) : detail}`);
+            }
+        } catch (error) {
+            removeTypingIndicator(typingId);
+            appendMessage('agent', '❌ Lỗi kết nối: Không thể gửi yêu cầu tới API.');
+            console.error(error);
+        }
+    }
+
+    function appendMessage(sender, text) {
+        const container = document.getElementById('chat-messages');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${sender}`;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        // Simple markdown newline conversion
+        bubble.innerHTML = text.replace(/\n/g, '<br>');
+
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        const msgTime = new Date();
+        timeDiv.innerText = msgTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        msgDiv.appendChild(bubble);
+        msgDiv.appendChild(timeDiv);
+        container.appendChild(msgDiv);
+        
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+        const container = document.getElementById('chat-messages');
+        const indicator = document.createElement('div');
+        const id = 'typing_' + Date.now();
+        indicator.id = id;
+        indicator.className = 'typing-indicator';
+        
+        for (let i = 0; i < 3; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'typing-dot';
+            indicator.appendChild(dot);
+        }
+        
+        container.appendChild(indicator);
+        container.scrollTop = container.scrollHeight;
+        return id;
+    }
+
+    function removeTypingIndicator(id) {
+        const indicator = document.getElementById(id);
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+</script>
+</body>
+</html>

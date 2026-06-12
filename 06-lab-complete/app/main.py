@@ -26,13 +26,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Security, Depends, Request, Response
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
 from app.config import settings
 
-# Mock LLM (thay bằng OpenAI/Anthropic khi có API key)
-from utils.mock_llm import ask as llm_ask
+# Hàm LLM Routing linh hoạt
+from app.llm import ask as llm_ask
 
 # ─────────────────────────────────────────────────────────
 # Logging — JSON structured
@@ -127,6 +128,9 @@ app = FastAPI(
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url=None,
 )
+
+# Giao diện Chat UI tĩnh
+app.mount("/chat", StaticFiles(directory="static", html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,

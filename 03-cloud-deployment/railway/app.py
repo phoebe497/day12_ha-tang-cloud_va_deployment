@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from utils.mock_llm import ask
 
-app = FastAPI(title="Agent on Railway", version="1.0.0")
+app = FastAPI(title="Agent on Railway", version="1.0.1")
 START_TIME = time.time()
 
 app.add_middleware(

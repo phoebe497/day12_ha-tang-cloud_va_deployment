@@ -107,17 +107,17 @@ python app.py
 
 | Feature | Basic | Advanced | Tại sao quan trọng? |
 |---------|-------|----------|---------------------|
-| Config | Hardcode | Env vars | ... |
-| Health check |  |  | ... |
-| Logging | print() | JSON | ... |
-| Shutdown | Đột ngột | Graceful | ... |
+| Config | Hardcode | Env vars | Ngăn lộ secret key (như API key, DB URL) lên GitHub; dễ dàng thay đổi cấu hình giữa các môi trường (dev, staging, prod) không cần sửa mã nguồn. |
+| Health check | Không có | Có (`/health`, `/ready`) | Nền tảng cloud (Railway, Kubernetes...) có thể giám sát trạng thái để tự động khởi động lại nếu ứng dụng bị treo (liveness), và điều phối traffic phù hợp (readiness). |
+| Logging | print() | JSON | Dễ dàng thu thập và phân tích tự động bằng công cụ log aggregator (Datadog, Loki...); ngăn chặn việc vô tình log các secrets nhạy cảm. |
+| Shutdown | Đột ngột | Graceful | Cho phép các request đang xử lý dở dang (in-flight requests) được hoàn thành nốt và đóng các kết nối (Database, API) an toàn trước khi tắt app. |
 
 ###  Checkpoint 1
 
-- [ ] Hiểu tại sao hardcode secrets là nguy hiểm
-- [ ] Biết cách dùng environment variables
-- [ ] Hiểu vai trò của health check endpoint
-- [ ] Biết graceful shutdown là gì
+- [x] Hiểu tại sao hardcode secrets là nguy hiểm
+- [x] Biết cách dùng environment variables
+- [x] Hiểu vai trò của health check endpoint
+- [x] Biết graceful shutdown là gì
 
 ---
 
@@ -143,10 +143,15 @@ cd ../../02-docker/develop
 
 **Nhiệm vụ:** Đọc `Dockerfile` và trả lời:
 
-1. Base image là gì?
-2. Working directory là gì?
-3. Tại sao COPY requirements.txt trước?
-4. CMD vs ENTRYPOINT khác nhau thế nào?
+1. **Base image là gì?**
+   - `python:3.11` (Bản phân phối Python đầy đủ chạy trên nền Debian GNU/Linux).
+2. **Working directory là gì?**
+   - `/app` (Tất cả lệnh chạy tiếp theo và file copy vào sẽ mặc định nằm ở thư mục này).
+3. **Tại sao COPY requirements.txt trước?**
+   - Để tận dụng tối đa cơ chế **caching layer** của Docker. Do quá trình cài đặt thư viện (`pip install`) tốn nhiều thời gian, việc copy riêng file `requirements.txt` trước và cài đặt dependencies giúp Docker cached lại layer này. Chỉ khi `requirements.txt` thay đổi thì Docker mới phải chạy lại lệnh `pip install`, còn nếu chỉ thay đổi file code (`app.py`), Docker sẽ bỏ qua bước cài thư viện giúp tốc độ build nhanh hơn nhiều.
+4. **CMD vs ENTRYPOINT khác nhau thế nào?**
+   - `ENTRYPOINT` quy định lệnh/file thực thi chính chạy khi container khởi động (rất khó bị ghi đè trực tiếp khi chạy container).
+   - `CMD` định nghĩa các tham số mặc định cho `ENTRYPOINT` (hoặc lệnh chạy nếu không khai báo `ENTRYPOINT`), và có thể bị ghi đè dễ dàng bằng cách thêm tham số vào cuối lệnh `docker run`.
 
 ###  Exercise 2.2: Build và run
 
@@ -164,6 +169,8 @@ curl http://localhost:8000/ask -X POST \
 ```
 
 **Quan sát:** Image size là bao nhiêu?
+- Kích thước image quan sát được là: **1.66GB** (rất nặng do sử dụng full Python base image chứa nhiều công cụ build OS không cần thiết cho môi trường chạy ứng dụng).
+
 ```bash
 docker images my-agent:develop
 ```
@@ -175,9 +182,19 @@ cd ../production
 ```
 
 **Nhiệm vụ:** Đọc `Dockerfile` và tìm:
-- Stage 1 làm gì?
-- Stage 2 làm gì?
-- Tại sao image nhỏ hơn?
+* **Stage 1 (Builder) làm gì?**
+  - Sử dụng base image `python:3.11-slim` đặt tên là `builder`.
+  - Cài đặt các công cụ build hệ thống (compiler, header libraries như `gcc`, `libpq-dev`).
+  - Thực hiện cài đặt các thư viện Python (dependencies) vào thư mục `/root/.local` thông qua cờ `--user` để dễ dàng copy sang stage sau mà không sinh rác hệ thống ở stage cuối.
+* **Stage 2 (Runtime) làm gì?**
+  - Khởi tạo từ một image `python:3.11-slim` sạch hoàn toàn, đặt tên là `runtime`.
+  - Tạo user không có quyền root (`appuser`) vì lý do bảo mật (không chạy app dưới quyền root trong container).
+  - Copy các thư viện Python đã build xong từ `builder` stage (`/root/.local`) sang thư mục của `appuser` (`/home/appuser/.local`).
+  - Copy mã nguồn ứng dụng (`main.py`, `utils/mock_llm.py`), phân quyền sở hữu cho `appuser` và thiết lập chạy ứng dụng dưới quyền user này.
+  - Cấu hình `HEALTHCHECK` kiểm tra trạng thái hoạt động định kỳ và định nghĩa lệnh khởi động Uvicorn.
+* **Tại sao image nhỏ hơn?**
+  - **Dùng base image slim:** `python:3.11-slim` loại bỏ các gói cài đặt hệ thống không cần thiết, giúp giảm dung lượng gốc.
+  - **Tách biệt môi trường build và chạy (Multi-stage):** Toàn bộ các công cụ biên dịch nặng như `gcc`, `libpq-dev`, cache của `pip`, và các file tạm phục vụ build chỉ nằm lại ở `builder` (Stage 1). Ở `runtime` (Stage 2) chỉ chứa các file nhị phân đã biên dịch và file code chạy chính thức. Điều này giúp giảm thiểu tối đa kích thước và tăng tính bảo mật (hạn chế các công cụ bị khai thác nếu container bị hack).
 
 Build và so sánh:
 ```bash
@@ -185,15 +202,47 @@ docker build -t my-agent:advanced .
 docker images | grep my-agent
 ```
 
+* **Kết quả quan sát được:**
+  - `my-agent:develop`: **1.66GB**
+  - `my-agent:advanced`: **236MB** (Tiết kiệm khoảng **85%** dung lượng!)
+
+  Minh chứng chạy lệnh thực tế trên Ubuntu WSL:
+  ```bash
+  $ docker images | grep my-agent
+  my-agent                   advanced       0d6e54c103e0   About a minute ago   236MB
+  my-agent                   develop        39a3f861c988   About an hour ago    1.66GB
+  my-agent                   latest         4d66ba3612cb   About an hour ago    1.66GB
+  ```
+
 ###  Exercise 2.4: Docker Compose stack
 
 **Nhiệm vụ:** Đọc `docker-compose.yml` và vẽ architecture diagram.
+
+```mermaid
+graph TD
+    Client["🌐 Client (Browser/curl)"] -- "Port 80 (HTTP)" --> Nginx["🐳 Nginx Container (Reverse Proxy)"]
+    
+    subgraph "Docker Internal Network (Bridge)"
+        Nginx -- "Load Balancer (Port 8000)" --> Agent["🐳 Agent Container (FastAPI)"]
+        Agent -- "Cache & Rate Limit (Port 6379)" --> Redis["🐳 Redis Container"]
+        Agent -- "Vector DB (Port 6333)" --> Qdrant["🐳 Qdrant Container"]
+    end
+```
 
 ```bash
 docker compose up
 ```
 
-Services nào được start? Chúng communicate thế nào?
+* **Các Services được khởi động:**
+  1. **nginx:** Reverse proxy và Load Balancer (chỉ dịch vụ này mở cổng `80` ra ngoài máy host).
+  2. **agent:** Chứa mã nguồn FastAPI của AI Agent (chạy cổng `8000` nội bộ).
+  3. **redis:** Cơ sở dữ liệu in-memory dùng để lưu cache sessions hoặc kiểm soát tốc độ request (rate limit) (chạy cổng `6379` nội bộ).
+  4. **qdrant:** Cơ sở dữ liệu Vector dùng cho bài toán RAG (Retrieval-Augmented Generation) (chạy cổng `6333` nội bộ).
+
+* **Cách thức communicate (giao tiếp):**
+  - **Mạng cô lập (Isolation):** Tất cả 4 containers cùng tham gia vào một Docker network chung có tên là `internal` kiểu `bridge`. Các containers có thể giao tiếp với nhau qua tên service (DNS nội bộ của Docker như `redis`, `qdrant`, `agent`) mà không cần biết địa chỉ IP cụ thể.
+  - **Bảo mật mạng:** Chỉ có duy nhất cổng `80` (HTTP) và `443` (HTTPS) của container `nginx` được ánh xạ (expose) ra cổng vật lý của máy host (`80:80`). Các cổng của `agent` (8000), `redis` (6379) và `qdrant` (6333) đều bị khóa kín trong mạng nội bộ, ngăn chặn truy cập trái phép từ bên ngoài trực tiếp vào DB hay Backend.
+  - **Luồng dữ liệu:** Client gửi request đến máy host ở cổng `80` -> `nginx` tiếp nhận -> áp dụng luật rate limit (`limit_req_zone`) -> phân phối (proxy_pass) đến `agent_backend` -> `agent` kết nối đến `redis` và `qdrant` để xử lý -> trả lời client thông qua `nginx`.
 
 Test:
 ```bash
@@ -208,10 +257,10 @@ curl http://localhost/ask -X POST \
 
 ###  Checkpoint 2
 
-- [ ] Hiểu cấu trúc Dockerfile
-- [ ] Biết lợi ích của multi-stage builds
-- [ ] Hiểu Docker Compose orchestration
-- [ ] Biết cách debug container (`docker logs`, `docker exec`)
+- [x] Hiểu cấu trúc Dockerfile
+- [x] Biết lợi ích của multi-stage builds
+- [x] Hiểu Docker Compose orchestration
+- [x] Biết cách debug container (`docker logs`, `docker exec`)
 
 ---
 
